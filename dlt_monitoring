@@ -1,0 +1,101 @@
+# Databricks DLT Pipeline Monitoring API Utilities
+# Script to track pipeline runs, durations, status, and provide monitoring insights.
+
+import requests
+import pandas as pd
+from datetime import datetime
+from collections import Counter
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, max as spark_max
+
+# ---------- CONFIG ----------
+DATABRICKS_HOST = "https://<your-workspace>.cloud.databricks.com"
+TOKEN = dbutils.secrets.get(scope="monitoring", key="dlt_token")
+PIPELINE_ID = "<your-pipeline-id>"
+SOURCE_TABLE = "cloud_files_state_hms('main', 'raw_data', 'your_table')"
+S3_PATH = "s3a://your-ingest-bucket/prefix/"  # Adjust as needed
+
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+spark = SparkSession.getActiveSession()
+
+# ---------- API HELPERS ----------
+def get_pipeline_updates():
+    url = f"{DATABRICKS_HOST}/api/2.0/pipelines/{PIPELINE_ID}/updates"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json().get("updates", [])
+
+def get_pipeline_config():
+    url = f"{DATABRICKS_HOST}/api/2.0/pipelines/{PIPELINE_ID}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()
+
+def get_update_details(update_id):
+    url = f"{DATABRICKS_HOST}/api/2.0/pipelines/{PIPELINE_ID}/updates/{update_id}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()
+
+def trigger_pipeline(full_refresh=False):
+    url = f"{DATABRICKS_HOST}/api/2.0/pipelines/{PIPELINE_ID}/updates"
+    response = requests.post(url, headers=HEADERS, json={"full_refresh": full_refresh})
+    response.raise_for_status()
+    return response.json()
+
+# ---------- METRIC COLLECTION ----------
+updates = get_pipeline_updates()
+
+# Run states summary
+state_counts = Counter([u["state"] for u in updates])
+print("Run state summary:", state_counts)
+
+# Run durations
+print("\nRun durations:")
+for u in updates:
+    started = datetime.fromtimestamp(u["creation_time"] / 1000)
+    ended = datetime.fromtimestamp(u["last_update_time"] / 1000)
+    duration = ended - started
+    print(f"{u['update_id']} took {duration} ({u['state']})")
+
+# Alert on failed runs
+latest = updates[0]
+if latest["state"] != "COMPLETED":
+    print(f"\n🚨 Pipeline FAILED or not complete: {latest['state']} — Cause: {latest.get('cause', 'Unknown')}")
+
+# Save updates to Delta
+df = pd.DataFrame(updates)
+spark_df = spark.createDataFrame(df)
+spark_df.write.mode("overwrite").saveAsTable("monitoring.dlt_run_history")
+
+# ---------- PIPELINE CONFIG SNAPSHOT ----------
+config = get_pipeline_config()
+print("\nPipeline configuration:")
+print("Name:", config.get("name"))
+print("Channel:", config.get("channel"))
+print("Storage:", config.get("storage"))
+print("Target schema:", config.get("target"))
+print("Edition:", config.get("edition"))
+print("Configured tables:", config.get("tables", []))
+print("Clusters:", config.get("clusters", []))
+
+# ---------- ESTIMATE FILES WAITING TO BE PROCESSED ----------
+print("\nEstimating unprocessed files...")
+
+# Step 1: Get latest ingestion timestamp from cloud_files_state_hms
+latest_ts_df = spark.sql(f"""
+    SELECT MAX(modification_time) AS latest_mod_time
+    FROM {SOURCE_TABLE}
+    WHERE ingestion_timestamp IS NOT NULL
+""")
+latest_ts = latest_ts_df.collect()[0]["latest_mod_time"]
+print("Latest ingested file modification time:", latest_ts)
+
+# Step 2: List S3 files modified after that timestamp
+# NOTE: Requires Spark to have S3A configured and access to source bucket
+s3_df = spark.read.format("binaryFile").load(S3_PATH)
+s3_filtered = s3_df.filter(col("modificationTime") > latest_ts)
+file_count = s3_filtered.count()
+
+print(f"Unprocessed files (modified after latest ingestion): {file_count}")
+print("\nDLT pipeline monitoring summary complete.")
