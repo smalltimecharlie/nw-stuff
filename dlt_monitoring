@@ -6,13 +6,13 @@ import pandas as pd
 from datetime import datetime
 from collections import Counter
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, max as spark_max
+from pyspark.sql.functions import col, explode, from_json, max as spark_max, unix_timestamp
 
 # ---------- CONFIG ----------
 DATABRICKS_HOST = "https://<your-workspace>.cloud.databricks.com"
 TOKEN = dbutils.secrets.get(scope="monitoring", key="dlt_token")
 PIPELINE_ID = "<your-pipeline-id>"
-SOURCE_TABLE = "cloud_files_state_hms('main', 'raw_data', 'your_table')"
+EVENT_LOG_PATH = "s3a://your-pipeline-storage/system/events/"  # Adjust if using DBFS
 S3_PATH = "s3a://your-ingest-bucket/prefix/"  # Adjust as needed
 
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
@@ -51,14 +51,25 @@ state_counts = Counter([u["state"] for u in updates])
 print("Run state summary:", state_counts)
 
 # Run durations
-print("\nRun durations:")
+print("
+Run durations:")
 for u in updates:
+    update_id = u['update_id']
     started = datetime.fromtimestamp(u["creation_time"] / 1000)
-    ended = datetime.fromtimestamp(u["last_update_time"] / 1000)
+    try:
+        details = get_update_details(update_id)
+        completed_ts = details.get("update_state", {}).get("timestamp")
+        if completed_ts:
+            ended = datetime.fromtimestamp(completed_ts / 1000)
+        else:
+            ended = datetime.now()
+    except Exception as e:
+        print(f"Warning: couldn't fetch details for update {update_id}: {e}")
+        ended = datetime.now()
     duration = ended - started
-    print(f"{u['update_id']} took {duration} ({u['state']})")
+    print(f"{update_id} took {duration} ({u['state']}) [started at {started}, ended at {ended}]")
 
-# Alert on failed runs
+
 latest = updates[0]
 if latest["state"] != "COMPLETED":
     print(f"\n🚨 Pipeline FAILED or not complete: {latest['state']} — Cause: {latest.get('cause', 'Unknown')}")
@@ -79,23 +90,64 @@ print("Edition:", config.get("edition"))
 print("Configured tables:", config.get("tables", []))
 print("Clusters:", config.get("clusters", []))
 
-# ---------- ESTIMATE FILES WAITING TO BE PROCESSED ----------
-print("\nEstimating unprocessed files...")
+# ---------- ESTIMATE FILES WAITING TO BE PROCESSED (via event log) ----------
+print("\nEstimating unprocessed files using DLT event log...")
 
-# Step 1: Get latest ingestion timestamp from cloud_files_state_hms
-latest_ts_df = spark.sql(f"""
-    SELECT MAX(modification_time) AS latest_mod_time
-    FROM {SOURCE_TABLE}
-    WHERE ingestion_timestamp IS NOT NULL
-""")
-latest_ts = latest_ts_df.collect()[0]["latest_mod_time"]
-print("Latest ingested file modification time:", latest_ts)
+# Load the event log
+event_df = spark.read.format("delta").load(EVENT_LOG_PATH)
+flow_progress_df = event_df.filter(col("event_type") == "flow_progress")
 
-# Step 2: List S3 files modified after that timestamp
-# NOTE: Requires Spark to have S3A configured and access to source bucket
+# Flatten processed files from event details
+processed_df = (
+    flow_progress_df
+    .filter(col("details.sources").isNotNull())
+    .select(explode("details.sources").alias("source"))
+    .filter(col("source.processedFiles").isNotNull())
+    .select(explode("source.processedFiles").alias("file_path"))
+    .distinct()
+)
+processed_files = [row.file_path for row in processed_df.collect()]
+print(f"Processed files recorded in event log: {len(processed_files)}")
+
+# List files from S3 source
 s3_df = spark.read.format("binaryFile").load(S3_PATH)
-s3_filtered = s3_df.filter(col("modificationTime") > latest_ts)
-file_count = s3_filtered.count()
+s3_info_df = s3_df.select(col("path"), col("modificationTime"))
+s3_paths = [row.path for row in s3_info_df.collect()]
 
-print(f"Unprocessed files (modified after latest ingestion): {file_count}")
+# Determine unprocessed files
+unprocessed = s3_info_df.filter(~col("path").isin(processed_files))
+unprocessed_count = unprocessed.count()
+print(f"Unprocessed files (in S3 but not in event log): {unprocessed_count}")
+print("Sample:", unprocessed.select("path").limit(5).toPandas())
+
+# ---------- INGESTION LAG METRICS ----------
+print("\nCalculating ingestion lag from event log...")
+
+lag_df = (
+    flow_progress_df
+    .filter(col("details.sources").isNotNull())
+    .select(explode("details.sources").alias("source"), col("timestamp"))
+    .filter(col("source.processedFiles").isNotNull())
+    .select(col("timestamp"), explode(col("source.processedFiles")).alias("file"))
+    .join(s3_df.select(col("path"), col("modificationTime")), s3_df.path == col("file"), "inner")
+    .select(
+        col("file"),
+        col("timestamp").alias("ingestion_time"),
+        col("modificationTime").alias("source_mod_time"),
+        (unix_timestamp("timestamp") - unix_timestamp("modificationTime")).alias("ingestion_lag_sec")
+    )
+)
+
+lag_df.createOrReplaceTempView("dlt_ingestion_lag")
+
+lag_stats = spark.sql("""
+    SELECT 
+        COUNT(*) AS file_count,
+        MAX(ingestion_lag_sec) AS max_lag_sec,
+        AVG(ingestion_lag_sec) AS avg_lag_sec
+    FROM dlt_ingestion_lag
+""")
+
+lag_stats.show()
+
 print("\nDLT pipeline monitoring summary complete.")
