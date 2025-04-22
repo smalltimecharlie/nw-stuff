@@ -1,0 +1,72 @@
+Description
+As part of our ongoing effort to test robustness and edge-case behaviors in Databricks DLT architecture, this task involves designing and executing a test plan for multiple Delta Live Tables (DLT) pipelines writing to and reading from the same target directory—both for data sinks and checkpoint directories.
+
+The primary focus is to observe and document the checkpointing behavior when:
+
+Multiple DLT pipelines are configured to write to the same target location (e.g., /mnt/data/bronze/events)
+
+Each pipeline has its own checkpoint directory
+
+Pipelines attempt to use the same checkpoint directory (deliberately misconfigured case)
+
+Pipelines are restarted independently after partial or full failure
+
+Schema changes or data loss occur in the source directory
+
+This will help us understand:
+
+Whether checkpoint isolation is enforced across pipelines
+
+How Databricks handles duplicate or clashing checkpoint states
+
+How DLT recovers (or fails) when checkpoint integrity is compromised
+
+The outcome will be used to determine best practices for running parallel pipelines that consume or write to shared resources.
+
+Scope
+Create 3–5 minimal DLT pipelines using cloud_files() or other ingestion methods
+
+All pipelines point to the same source and/or target directory
+
+Mix of unique and shared checkpoint configurations
+
+Monitor Delta logs, checkpoint metadata, and event logs
+
+Record recovery behavior after a pipeline failure or manual interruption
+
+Out of Scope
+Complex transformations or production-tier data flows
+
+CI/CD deployment or Git integration testing
+
+Long-term data retention or schema evolution strategies
+
+Acceptance Criteria
+✅ Test Pipelines Created: At least three Databricks DLT pipelines are created and successfully run, with controlled overlap in source/target directories and checkpoint configuration.
+
+✅ Independent Checkpoints: Demonstrate that pipelines using separate checkpoint directories operate without conflict when targeting the same sink.
+
+✅ Shared Checkpoint Conflict: Demonstrate that pipelines fail or behave unexpectedly when using the same checkpoint location.
+
+✅ Checkpoint Recovery Behavior: Document behavior when one or more pipelines are restarted with:
+
+Existing checkpoint state
+
+Deleted or corrupted checkpoint state
+
+✅ Failure Logging: Capture and review error logs for shared checkpoint directory conflicts.
+
+✅ Detailed Report: A summary report is attached to the ticket, including:
+
+Pipeline configs used
+
+Observations of behavior (expected and actual)
+
+Logs or screenshots of key results
+
+Recommendations for safe usage patterns
+
+Notes
+Consider using spark.databricks.delta.checkpoint.writeStatsAsJson.enabled and similar flags to inspect checkpoint contents.
+
+Use dbutils.fs.ls() and %fs head to explore and validate checkpoint file structure and changes.
