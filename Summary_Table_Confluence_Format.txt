@@ -1,0 +1,7 @@
+|| Tool || Ownership || Roles || Retention || Completeness || AWS Fit || Lineage || Audit || Extensibility || Open Source || Deployment || Fit ||
+| Unity Catalog | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ✅ | 🧩 Databricks-native |
+| OpenMetadata | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🎯 Open-source & cloud-native |
+| DataHub | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚙️ Engineering-heavy |
+| Apache Atlas | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ⚠️ | 🏗️ Hadoop legacy |
+| Collibra | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | 🛡️ Regulated enterprise |
+| Alation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚠️ | 📊 BI/analyst-centric |
