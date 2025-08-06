@@ -1,0 +1,36 @@
+Ticket ID | Title                                  | Description                                                                                     | Story Points
+--------------------------------------------------------------------------------------------------------------
+CAT-001   | Define Metadata Taxonomy               | Define required fields (e.g., controller, processor, owner, retention) and standard values.     | 3
+CAT-002   | Final Tool Selection                   | Confirm choice between Unity, OpenMetadata, or DataHub based on PoC results.                    | 1
+CAT-003   | Assign Roles & Responsibilities        | Confirm catalog roles (admin, steward, engineer) and assign user groups.                        | 2
+CAT-004   | Governance Policy Draft                | Document ingestion policy, mandatory fields, permitted use restrictions, ownership expectations.| 3
+CAT-005   | Build Metadata Validation Rules        | Define and codify rules for enforcing REQ-7 metadata requirements.                              | 3
+CAT-006   | Design Metadata Ingestion Flow         | Define how metadata will be captured: API, notebook, UI, or pipeline.                           | 2
+CAT-007   | Audit Logging & Monitoring Setup       | Determine how metadata changes and usage will be logged and surfaced.                           | 3
+CAT-008   | Documentation & Usage Guide            | Create usage guides for engineers, stewards, and compliance.                                    | 3
+
+UC-101    | Create Production Catalog              | Create and configure Unity Catalog (`production_catalog`) with domain schemas.                  | 2
+UC-102    | Set Up Permissions & ACLs              | Configure access control across catalog objects.                                                | 2
+UC-103    | Create Metadata Enrichment Job         | Build a scheduled job to update metadata using TBLPROPERTIES.                                   | 3
+UC-104    | Enforce Metadata on Ingest             | Fail ingestion if required metadata is missing (REQ-7).                                         | 3
+UC-105    | Integrate with Lineage View            | Validate automatic lineage capture and visualisation.                                           | 2
+UC-106    | Enable Information Schema Queries      | Build dashboards from `information_schema` and `table_properties`.                              | 2
+
+OM-201    | Deploy OpenMetadata on AWS             | Use ECS/EKS or EC2 to deploy OpenMetadata stack.                                                | 5
+OM-202    | Configure S3 + Glue Connectors         | Set up ingestion from S3 and Glue into OpenMetadata.                                            | 3
+OM-203    | Define Custom Metadata Fields          | Add controller, processor, permitted use to entity schemas.                                     | 2
+OM-204    | Create Validation Policies             | Use policy engine to enforce required metadata and ownership.                                   | 3
+OM-205    | Tag & Classification Model             | Apply tags/classifications for permitted use.                                                   | 2
+OM-206    | Enable Usage Tracking & Alerts         | Build dashboards for stale/unused data alerts.                                                  | 2
+
+DH-301    | Deploy DataHub on AWS                  | Deploy via Docker/Kubernetes on AWS.                                                            | 5
+DH-302    | Configure Metadata Ingestion           | Use CLI to ingest from S3/Glue.                                                                 | 3
+DH-303    | Extend Metadata Schema                 | Add required metadata fields (controller, processor, etc.).                                     | 3
+DH-304    | Build Policy Enforcement Hook          | Create validation plugin for incomplete metadata.                                               | 4
+DH-305    | Integrate with Lineage Graph           | Validate lineage capture and path tagging.                                                      | 2
+DH-306    | Set Up Metadata Change Dashboard       | Build change tracking dashboard for metadata governance.                                        | 2
+
+CAT-901   | Integrate with Slack or Teams          | Send alerts or reminders to Slack for metadata issues.                                          | 2
+CAT-902   | Add Consent/Agreement Tracking         | Link datasets to consent forms or DPAs.                                                         | 2
+CAT-903   | Stakeholder Training Sessions          | Run onboarding sessions for catalog users and owners.                                           | 2
+CAT-904   | Public Dataset Policy Review           | Review permitted use and retention of public datasets.                                          | 2
